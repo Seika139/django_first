@@ -389,7 +389,74 @@ activate      activate.fish  activate_this.py  easy_install   easy_install-3.5  
 activate.csh  activate.ps1   activate.xsh      easy_install3  pip               pip-3.5  python  python3.5  wheel3
 
 ubuntu@ip-172-31-47-18:~$ source django_udemy/bin/activate # 仮想環境をアクティベート
-(django_udemy) ubuntu@ip-172-31-47-18:~$ pip install django gunicorn psycopg2 # 必要なライブラリをインストール
+(django_udemy) ubuntu@ip-172-31-47-18:~$ pip install django gunicorn psycopg2 psycopg2-binary # 必要なライブラリをインストール
 ```
 
 ## プロジェクトをubuntu上に転送する
+
+レクチャーには従わずgithub経由で行った
+
+# マイグレーションとサーバーの動作確認
+
+```
+(django_udemy) ubuntu@ip-172-31-47-18:~/django_first$ pip install pillow
+(django_udemy) ubuntu@ip-172-31-47-18:~/django_first/first_app/first_app$ vim settings.py # settingのDBの部分を書き換えた
+```
+
+ここで マイグレーションのコマンドが権限のせいで実行できない問題が発生した。UNIXではpeerという認証方式を使っているかららしい。
+
+#### 参考記事
+* https://techracho.bpsinc.jp/kazumasa-ogawa/2013_04_25/8244
+* https://cpoint-lab.co.jp/article/201807/4217/
+
+そこでdbの認証形式を書き換える
+
+```
+(django_udemy) ubuntu@ip-172-31-47-18:$ cd /etc/postgresql/9.5/main
+(django_udemy) ubuntu@ip-172-31-47-18:/etc/postgresql/9.5/main$ ls -l
+total 48
+-rw-r--r-- 1 postgres postgres   315 May  5 12:25 environment
+-rw-r--r-- 1 postgres postgres   143 May  5 12:25 pg_ctl.conf
+-rwxrw-r-- 1 postgres postgres  4641 May  5 12:25 pg_hba.conf
+-rw-r----- 1 postgres postgres  1636 May  5 12:25 pg_ident.conf
+-rw-r--r-- 1 postgres postgres 21716 May  5 12:25 postgresql.conf
+-rw-r--r-- 1 postgres postgres   378 May  5 12:25 start.conf
+(django_udemy) ubuntu@ip-172-31-47-18:/etc/postgresql/9.5/main$ sudo chmod 766 pg_hba.conf
+(django_udemy) ubuntu@ip-172-31-47-18:/etc/postgresql/9.5/main$ vim pg_hba.conf
+(django_udemy) ubuntu@ip-172-31-47-18:/etc/postgresql/9.5/main$
+```
+
+`pg_hba.conf`の
+
+```
+local all postgres peer
+```
+の記述を
+```
+local all postgres md5
+```
+に書き換える。
+
+```
+sudo /etc/init.d/postgresql restart
+```
+
+これでDBを再起動する。
+
+```
+(django_udemy) ubuntu@ip-172-31-47-18:~$ python3 django_first/first_app/manage.py migrate
+```
+
+## 一旦8000番のポートを使えるようにする
+
+セキュリティーグループのインバウンドルールを編集
+ルールを追加
+カスタムのTCP 8000 0.0.0.0/0 説明
+
+```
+(django_udemy) ubuntu@ip-172-31-47-18:~$ python3 django_first/first_app/manage.py runserver 0.0.0.0:8000
+```
+
+I made it!
+
+バックエンドについてはgunivcornやnginxを導入していく
