@@ -460,3 +460,133 @@ sudo /etc/init.d/postgresql restart
 I made it!
 
 バックエンドについてはgunivcornやnginxを導入していく
+
+## Gunicornの動作確認
+
+```
+(django_udemy) ubuntu@ip-172-31-47-18:~/django_first/first_app$ gunicorn --bind 0.0.0.0:8000 first_app.wsgi # pathを.区切りで与える
+# 動作を確認
+(django_udemy) ubuntu@ip-172-31-47-18:~/django_first/first_app$ deactivate
+```
+
+## Gunicornの自動起動設定
+
+```
+ubuntu@ip-172-31-47-18:~/django_first/first_app/first_app$ sudo vim /etc/systemd/system/gunicorn.service # gunicornの設定を書き込む
+ubuntu@ip-172-31-47-18:~/django_first/first_app/first_app$ sudo systemctl start gunicorn
+ubuntu@ip-172-31-47-18:~/django_first/first_app/first_app$ sudo systemctl enable gunicorn
+Created symlink from /etc/systemd/system/multi-user.target.wants/gunicorn.service to /etc/systemd/system/gunicorn.service
+```
+
+```/etc/systemd/system/gunicorn.service
+[Unit]
+Description=gunicorn daemon
+After=network.target
+
+[Service]
+User=ubuntu
+Group=www-data
+WorkingDirectory=/home/ubuntu/django_first/first_app
+ExecStart=/home/ubuntu/django_udemy/bin/gunicorn --access-logfile - --workers 3 --bind unix:/home/ubuntu/django_first/django_first.sock first_app.wsgi:application
+
+[Install]
+WantedBy=multi-user.target
+```
+
+もしもうまくいかないときは
+
+```
+sudo systemctl daemon-reload
+sudo systemctl start gunicorn
+sudo systemctl enable gunicorn
+```
+
+でやり直して
+
+```
+sudo systemctl status gunicorn
+```
+
+で再びうまく動いているかを確認する
+
+```
+● gunicorn.service - gunicorn daemon
+   Loaded: loaded (/etc/systemd/system/gunicorn.service; enabled; vendor preset: enabled)
+   Active: active (running) since Wed 2020-05-06 04:20:18 UTC; 2min 57s ago
+ Main PID: 2107 (gunicorn)
+   CGroup: /system.slice/gunicorn.service
+           ├─2107 /home/ubuntu/django_udemy/bin/python /home/ubuntu/django_udemy/bin/gunicorn --access-logfile - --workers 3 --bind unix:/home/ubuntu/django_first/django_first.sock fi
+           ├─2112 /home/ubuntu/django_udemy/bin/python /home/ubuntu/django_udemy/bin/gunicorn --access-logfile - --workers 3 --bind unix:/home/ubuntu/django_first/django_first.sock fi
+           ├─2113 /home/ubuntu/django_udemy/bin/python /home/ubuntu/django_udemy/bin/gunicorn --access-logfile - --workers 3 --bind unix:/home/ubuntu/django_first/django_first.sock fi
+           └─2115 /home/ubuntu/django_udemy/bin/python /home/ubuntu/django_udemy/bin/gunicorn --access-logfile - --workers 3 --bind unix:/home/ubuntu/django_first/django_first.sock fi
+
+May 06 04:20:18 ip-172-31-47-18 systemd[1]: Started gunicorn daemon.
+May 06 04:20:18 ip-172-31-47-18 gunicorn[2107]: [2020-05-06 04:20:18 +0000] [2107] [INFO] Starting gunicorn 20.0.4
+May 06 04:20:18 ip-172-31-47-18 gunicorn[2107]: [2020-05-06 04:20:18 +0000] [2107] [INFO] Listening at: unix:/home/ubuntu/django_first/django_first.sock (2107)
+May 06 04:20:18 ip-172-31-47-18 gunicorn[2107]: [2020-05-06 04:20:18 +0000] [2107] [INFO] Using worker: sync
+May 06 04:20:18 ip-172-31-47-18 gunicorn[2107]: [2020-05-06 04:20:18 +0000] [2112] [INFO] Booting worker with pid: 2112
+May 06 04:20:18 ip-172-31-47-18 gunicorn[2107]: [2020-05-06 04:20:18 +0000] [2113] [INFO] Booting worker with pid: 2113
+May 06 04:20:18 ip-172-31-47-18 gunicorn[2107]: [2020-05-06 04:20:18 +0000] [2115] [INFO] Booting worker with pid: 2115
+```
+
+こんな風になっていれば成功
+
+### nginx
+
+接続のイメージ
+クライアント - nginx - gunicorn - django
+
+```
+ubuntu@ip-172-31-47-18:~/django_first/first_app$ cd /etc/nginx/
+ubuntu@ip-172-31-47-18:/etc/nginx$ ls
+conf.d  fastcgi.conf  fastcgi_params  koi-utf  koi-win  mime.types  nginx.conf  proxy_params  scgi_params  sites-available  sites-enabled  snippets  uwsgi_params  win-utf
+ubuntu@ip-172-31-47-18:/etc/nginx$ cd sites-available/
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo vim firstapp
+```
+
+以下のように記述
+
+```/etc/nginx/sites-available/firstapp
+server {
+        listen 80;
+        server_name 13.114.88.188;
+
+        location = /favicon.ico {access_log off; log_not_found off;}
+        location /static/ {
+                root /home/ubuntu/django_first/first_app;
+        }
+
+        location / {
+                include proxy_params;
+                proxy_pass http://unix:/home/ubuntu/django_first/django_first.sock;
+        }
+}
+```
+
+再びコマンド
+
+
+```
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ ls
+default  firstapp
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo ln -s /etc/nginx/sites-available/firstapp /etc/nginx/sites-enabled/
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ ls -la /etc/nginx/sites-enabled/
+total 8
+drwxr-xr-x 2 root root 4096 May  6 04:30 .
+drwxr-xr-x 6 root root 4096 May  5 12:25 ..
+lrwxrwxrwx 1 root root   34 May  5 12:25 default -> /etc/nginx/sites-available/default
+lrwxrwxrwx 1 root root   35 May  6 04:30 firstapp -> /etc/nginx/sites-available/firstapp
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo nginx -t # テスト
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo systemctl restart nginx
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo ufw delete allow 8000 # ファイアーウォールの設定をいじる
+Could not delete non-existent rule
+Could not delete non-existent rule (v6)
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo ufw allow 'Nginx Full' # nginx を許可
+Rules updated
+Rules updated (v6)
+ubuntu@ip-172-31-47-18:/etc/nginx/sites-available$ sudo systemctl restart gunicorn
+```
+
+これでnginxをつかってサイトを表示できる
